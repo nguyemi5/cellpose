@@ -14,6 +14,7 @@ install_deps = [
     'fastremap',
     'imagecodecs',
     'roifile',
+    'scanimage-tiff-reader',
 ]
 
 image_deps = ['nd2', 'pynrrd']

@@ -13,6 +13,12 @@ from pathlib import Path
 import re
 from . import version_str
 from roifile import ImagejRoi, roiwrite
+try:
+    from ScanImageTiffReader import ScanImageTiffReader
+    HAS_SCANIMAGE = True
+except ImportError:
+    ScanImageTiffReader = None
+    HAS_SCANIMAGE = False
 
 try:
     from qtpy import QtGui, QtCore, Qt, QtWidgets
@@ -157,27 +163,37 @@ def imread(filename):
     # ensure that extension check is not case sensitive
     ext = os.path.splitext(filename)[-1].lower()
     if ext == ".tif" or ext == ".tiff":
-        with tifffile.TiffFile(filename) as tif:
-            ltif = len(tif.pages)
+        if HAS_SCANIMAGE:
             try:
-                full_shape = tif.shaped_metadata[0]["shape"]
+                with ScanImageTiffReader(filename) as tif:
+                    new_shape = (tif.data().shape[0]//2, 2, tif.data().shape[1], tif.data().shape[2])
+                    print(new_shape)
+                    img = tif.data().reshape(new_shape)
             except:
-                try:
-                    page = tif.series[0][0]
-                    full_shape = tif.series[0].shape
-                except:
-                    ltif = 0
-            if ltif < 10:
-                img = tif.asarray()
-            else:
-                page = tif.series[0][0]
-                shape, dtype = page.shape, page.dtype
-                ltif = int(np.prod(full_shape) / np.prod(shape))
-                io_logger.info(f"reading tiff with {ltif} planes")
-                img = np.zeros((ltif, *shape), dtype=dtype)
-                for i, page in enumerate(tqdm(tif.series[0])):
-                    img[i] = page.asarray()
-                img = img.reshape(full_shape)
+                print(
+                    "NOTE: ScanImageTiffReader not working for this tiff type, using tifffile"
+                )
+                with tifffile.TiffFile(filename) as tif:
+                    ltif = len(tif.pages)
+                    try:
+                        full_shape = tif.shaped_metadata[0]["shape"]
+                    except:
+                        try:
+                            page = tif.series[0][0]
+                            full_shape = tif.series[0].shape
+                        except:
+                            ltif = 0
+                    if ltif < 10:
+                        img = tif.asarray()
+                    else:
+                        page = tif.series[0][0]
+                        shape, dtype = page.shape, page.dtype
+                        ltif = int(np.prod(full_shape) / np.prod(shape))
+                        io_logger.info(f"reading tiff with {ltif} planes")
+                        img = np.zeros((ltif, *shape), dtype=dtype)
+                        for i, page in enumerate(tqdm(tif.series[0])):
+                            img[i] = page.asarray()
+                        img = img.reshape(full_shape)
         return img
     elif ext == ".dax":
         img = load_dax(filename)
